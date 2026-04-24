@@ -15,6 +15,47 @@ gobuster dir -u http://<target> -w /usr/share/seclists/Discovery/Web-Content/com
 
 # If HTTPS with bad cert, add -k
 gobuster dir -u https://<target> -w /usr/share/seclists/Discovery/Web-Content/common.txt -x php,txt,html -t 50 -k -o gobuster_ssl.txt
+
+## 1.5 Response Anomaly Analysis
+
+Default gobuster/ffuf runs can miss interesting endpoints if you blindly
+filter out the dominant status code (e.g. `-b 403`). Always baseline the
+noise first and filter by size instead.
+
+### Workflow
+
+```bash
+# 1. Probe to find the baseline noise size
+curl -s -o /dev/null -w "%{size_download} %{http_code}" http:///doesnotexist123
+
+# 2. Run ffuf filtering out that noise size
+ffuf -u http:///FUZZ -w ~/big.txt -fs 
+
+# 3. If you already have a raw ffuf output file, sieve it:
+grep -oP 'Size: \d+' ffuf.txt | sort | uniq -c | sort -rn   # find outlier sizes
+grep "Size: " ffuf.txt                              # find which URLs
+```
+
+### What to look for
+
+| Response size | What it might mean |
+|---|---|
+| Unique/large size among 403s | Forbidden but real — note the path |
+| 302 with small body | Redirect to login panel or internal page |
+| 401 | Auth-protected endpoint — try default creds |
+| Same size across 3-4 paths | Shared error/login page — still worth checking |
+
+### Key flags
+
+```bash
+-fs 0,   # filter multiple sizes
+-fc 403,404    # filter by status code (less precise than -fs)
+-fw 1          # filter by word count
+```
+
+> **Note:** gobuster's `-b 403` will hide *all* 403s including ones with
+> different body sizes that are actually interesting (e.g. `/test`, `/ecp`).
+> Prefer ffuf with `-fs` for more granular control.
 ```
 
 ## 2. Technology Identification
