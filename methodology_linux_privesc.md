@@ -281,6 +281,7 @@ find / -name id_rsa 2>/dev/null          # private keys
 find / -name authorized_keys 2>/dev/null
 cat ~/.ssh/id_rsa
 history                                   # credentials in past commands
+cat /home/*/.bash_history 2>/dev/null    # check all users' history for creds
 grep -r "password" /var/www/ 2>/dev/null  # web app config files
 grep -r "password" /opt/ 2>/dev/null
 ```
@@ -305,5 +306,6 @@ ssh -i id_rsa root@<TARGET_IP>
 | Writable dirs | `find / -writable -type d 2>/dev/null` |
 | NFS exports | `cat /etc/exports` |
 | Users | `cat /etc/passwd \| grep /home` |
+| Bash history | `cat /home/*/.bash_history 2>/dev/null` |
 
 **GTFOBins:** https://gtfobins.github.io/ — check every binary found via sudo, SUID, or capabilities.

